@@ -63,11 +63,12 @@ app.use('/faculty/profile', facultyProfileRoutes);
 
 // PostgreSQL client
 const db = new pg.Client({
-  user: "postgres",
-  host: "localhost",
-  database: "rtrp",
-  password: "12345",
-  port: 5000
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
+  ssl: { rejectUnauthorized: false } // Required for Render
 });
 
 db.connect(err => {
