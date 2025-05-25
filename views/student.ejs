@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Dashboard</title>
+  <link rel="icon" type="image/png" href="/pictures/MGIT.png">
+  <link rel="stylesheet" href="/css/student.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <!-- Header with User Dropdown -->
+  <div class="header">
+    <div class="logo">
+      <img src="/pictures/MGITlogo.jpg" alt="MGIT Logo" style="height: 60px;">
+    </div>
+
+    <h1>STUDENT - <%= user?.sid || "" %></h1>
+    <div class="user-dropdown">
+  <button class="dropdown-toggle student-dropdown" onclick="toggleDropdown()">
+    <i class="fa-regular fa-circle-user"></i>
+    <span>Student</span>
+  </button>
+  <div class="dropdown-menu" id="userDropdown">
+    <a href="/profile">Profile</a>
+    <div class="dropdown-divider"></div>
+    <a href="/logout">Logout</a>
+  </div>
+</div>
+<div style="position: absolute; right: 30px; top: 70px; z-index: 10; min-width: 250px;">
+  <% if (typeof monthlyCount !== 'undefined' && monthlyCount >= 4) { %>
+    <div class="alert alert-warning" style="background: #ff082d; color: #ffffff; border: 1px solid #de0336; border-radius: 4px; padding: 10px; margin-top: 10px;">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      You have made <%= monthlyCount %> requests this month!
+    </div>
+  <% } else {%>
+    <div class="alert alert-info" style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 4px; padding: 10px; margin-top: 10px;">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      You have made <%= monthlyCount %> requests this month!
+    </div>
+    <% } %>
+</div>   
+  </div>
+
+  <div class="container">
+    <!-- Quick Stats -->
+    <div class="stats">
+      <div class="stat">
+        <h3>Submitted</h3>
+        <p id="submittedCount"><%= stats?.submitted || 0 %></p>
+      </div>
+      <div class="stat">
+        <h3>Approved</h3>
+        <p id="approvedCount"><%= stats?.approved || 0 %></p>
+      </div>
+      <div class="stat">
+        <h3>Rejected</h3>
+        <p id="rejectedCount"><%= stats?.rejected || 0 %></p>
+      </div>
+      <div class="stat">
+        <h3>Pending</h3>
+        <p id="pendingCount"><%= stats?.pending || 0 %></p>
+      </div>
+    </div>
+
+    <!-- Submit New Request Button -->
+    <button type="button" class="submit-btn" onclick="openModal()">
+      Submit New Request
+    </button>
+
+    <!-- Tabs Navigation -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('recent-requests', this)">Recent Requests</button>
+      <button class="nav-tab" onclick="switchTab('all-requests', this)">All My Requests</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Recent Requests Tab -->
+      <div class="tab-pane show" id="recent-requests">
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Request Date</th>
+              </tr>
+            </thead>
+            <tbody id="recentRequestsTable">
+              <% if (recentRequests && recentRequests.length > 0) { %>
+                <% recentRequests.forEach(req => { %>
+                  <tr>
+                    <td><%= req.title %></td>
+                    <td><span class="status-badge status-<%= req.status.toLowerCase() %>"><%= req.status %></span></td>
+                    <td><%= req.date %></td>
+                    <td><%= req.submittedAt %></td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr><td colspan="4">No recent requests.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- All My Requests Tab -->
+      <div class="tab-pane" id="all-requests">
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Request ID</th>
+                <th>Type</th>
+                <th>Date Submitted</th>
+                <th>Status</th>
+                <th>Faculty Comments</th>
+              </tr>
+            </thead>
+            <tbody id="allRequestsTable">
+              <% if (allRequests && allRequests.length > 0) { %>
+                <% allRequests.forEach(req => { %>
+                  <tr>
+                    <td><%= req.id %></td>
+                    <td><%= req.type %></td>
+                    <td><%= req.date %></td>
+                    <td><span class="status-badge status-<%= req.status.toLowerCase() %>"><%= req.status %></span></td>
+                    <td><%= req.comments || '-' %></td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr><td colspan="5">No requests found.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Modal for submitting requests -->
+    <div class="modal" id="submitRequestModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Submit New Permission Request</h5>
+          <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form action="/submit-request" method="POST" id="permissionRequestForm" enctype="multipart/form-data">
+            <div class="form-group">
+              <label for="requestType" class="form-label">Type of Request</label>
+              <select class="form-control" id="requestType" name="req_type" required>
+                <option value="" disabled selected>Select request type</option>
+                <option value="leave">Leave</option>
+                <option value="gatepass">Gate-Pass</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="requestDescription" class="form-label">Reason/Description</label>
+              <textarea class="form-control" id="requestDescription" name="description" rows="3" required placeholder="Please provide details about your request"></textarea>
+            </div>
+            
+            <div class="form-group">
+              <label for="requestDate" class="form-label">Date</label>
+              <input type="date" class="form-control" id="requestDate" name="req_date" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="requestDocument" class="form-label">Supporting Document (Attendance-screenshot)</label>
+              <input class="form-control" type="file" id="requestDocument" name="requestDocument" accept="image/*" required>
+              <div class="form-text">The screenshot must contain attendance, student name and date (WHOLE PAGE FROM WINNOU)</div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="resetForm()">Reset</button>
+          <button type="button" class="btn btn-primary" onclick="submitForm()">Submit Request</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/student.js"></script>
+</body>
+</html>

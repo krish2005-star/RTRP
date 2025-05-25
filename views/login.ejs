@@ -1,0 +1,54 @@
+<!-- login.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login</title>
+  <link rel="icon" type="image/png" href="/pictures/MGIT.png">
+  <link rel="stylesheet" href="/css/login.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <div class="header">
+    <div class="logo-container">
+      <img src="/pictures/mgit.jpeg" alt="MGIT Logo">
+    </div>
+  </div>
+  
+  <div class="container">
+    <div class="panel active">
+      <% if (typeof error !== 'undefined' && error) { %> 
+        <p class="error-message"><%= error %></p> 
+      <% } %> 
+      
+      <form class="form" action="/login" method="POST"> 
+        <div class="title">Login</div>
+        
+        <div class="input-group">
+          <label>Select USER</label>
+          <select name="role" id="role-select" required>
+            <option value="student">Student</option>
+            <option value="faculty">Faculty</option>
+          </select>
+        </div>
+        
+        <div class="input-group">
+          <label><i class="fa-solid fa-user"></i> Username:</label>
+          <input type="email" name="username" id="username" placeholder="Enter your email" required> 
+        </div>
+        
+        <div class="input-group">
+          <label><i class="fa-solid fa-key"></i> Password:</label>
+          <input type="password" name="password" required placeholder="Roll ID"> 
+        </div>
+        
+        <button type="submit" class="login">Login</button> 
+        <a href="#">Forgot password?</a> 
+      </form> 
+    </div>
+  </div>
+  
+  <script src="/js/login.js"></script>
+</body>
+</html>

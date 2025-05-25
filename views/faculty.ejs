@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty Dashboard</title>
+  <link rel="icon" type="image/png" href="/pictures/MGIT.png">
+  <link rel="stylesheet" href="/css/faculty.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="logo">
+      <img src="/pictures/MGITlogo.jpg" alt="MGIT Logo" style="height: 60px;">
+    </div>
+    <div class="navbar-left">
+      <h1><%= faculty.name %></h1>
+    </div>
+    <div class="navbar-right">
+      <div class="dropdown">
+        <button class="dropdown-toggle" onclick="toggleDropdown()">
+          <i class="fa-regular fa-circle-user"></i> <span>Faculty</span>
+        </button>
+        <div class="dropdown-menu" id="userDropdown">
+          <a href="/faculty/profile">Profile</a>
+          <a href="/logout">Logout</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="tabs">
+    <button class="nav-tab active" onclick="switchTab('pendingTab', this)">Pending Requests</button>
+    <button class="nav-tab" onclick="switchTab('allRequestsTab', this)">All Requests</button>
+    <button class="nav-tab" onclick="switchTab('studentsTab', this)">Students</button>
+  </div>
+
+  <div class="tab-content">
+    <div id="pendingTab" class="tab-pane show">
+      <h2>Pending Requests (<%= stats.pendingRequests %>)</h2>
+      <table class="styled-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Roll</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Details</th>
+            <th>Actions</th>
+            <th>Comment</th>
+            <th>Monthly Requests</th>
+          </tr>
+        </thead>
+        <tbody id="pendingRequestsTable">
+  <% pendingRequests.forEach(function(req) { %>
+    <tr id="pending-row-<%= req.reqid %>">
+  <td><%= req.reqid %></td>
+  <td><%= req.sid %></td>
+  <td><%= req.req_type %></td>
+  <td><%= new Date(req.req_date).toLocaleDateString() %></td>
+  <td>
+    <button class="btn btn-info" onclick='showRequestDetails(<%- JSON.stringify(req) %>)'>Show</button>
+  </td>
+  <td>
+    <button class="btn btn-danger" onclick="respondRequest(<%=req.reqid%>, 'Rejected', this)">Reject</button>
+    <button class="btn btn-success" onclick="respondRequest(<%=req.reqid%>, 'Approved', this)">Accept</button>
+  </td>
+  <td>
+    <input type="text" id="comment-<%=req.reqid%>" placeholder="Comment">
+  </td>
+  <td>
+    <%= req.monthlyCount %>
+    <% if (req.monthlyCount >= 4) { %>
+      <span style="color: red; font-weight: bold;">(3+)</span>
+    <% } else { %>
+      <span style="color: black; font-weight: bold;"></span>
+    <% } %>
+  </td>
+</tr>
+  <% }) %>
+</tbody>
+      </table>
+    </div>
+
+    <div id="allRequestsTab" class="tab-pane">
+      <h2>All Requests (<%= stats.allRequests %>)</h2>
+      <input type="text" id="requestSearch" placeholder="Search requests...">
+      <table class="styled-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Student</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Comments</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="allRequestsTable">
+  <% if (allRequests && allRequests.length > 0) { %>
+    <% allRequests.forEach(function(req) { %>
+      <tr>
+        <td><%= req.reqid %></td>
+        <td><%= req.student_name %></td>
+        <td><%= req.req_type %></td>
+        <td><%= new Date(req.req_date).toLocaleDateString() %></td>
+        <td><%= req.status %></td>
+        <td><%= req.faculty_comments || '' %></td>
+        <td>
+          <button class="btn btn-info" onclick='showRequestDetails(<%- JSON.stringify(req) %>)'>Show</button>
+        </td>
+      </tr>
+    <% }) %>
+  <% } else { %>
+    <tr><td colspan="7">No requests found.</td></tr>
+  <% } %>
+</tbody>
+      </table>
+    </div>
+
+    <div id="studentsTab" class="tab-pane">
+      <h2>Students (<%= stats.students %>)</h2>
+      <input type="text" id="studentSearch" placeholder="Search students...">
+      <table class="styled-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Branch</th>
+            <th>Requests</th>
+            <th>View</th>
+          </tr>
+        </thead>
+        <tbody id="studentsTable">
+  <% if (students && students.length > 0) { %>
+    <% students.forEach(function(student) { %>
+      <tr>
+        <td><%= student.sid %></td>
+        <td><%= student.name %></td>
+        <td><%= student.branch || 'N/A' %></td>
+        <td>
+          <%= allRequests.filter(r => r.sid === student.sid).length %>
+        </td>
+        <td>
+          <button class="btn btn-info" onclick='showStudentRequests("<%= student.sid %>")'>Requests</button>
+        </td>
+      </tr>
+    <% }) %>
+  <% } else { %>
+    <tr><td colspan="4">No students found.</td></tr>
+  <% } %>
+</tbody>
+      </table>
+    </div>
+  </div>
+
+<div id="requestDetailsModal" class="modal">
+  <div class="modal-content">
+    <span class="close-button" onclick="closeModal()">&times;</span>
+    <h3>Request Details</h3>
+    <hr>
+    <h4>Parent Details</h4>
+    <p><strong>Name:</strong> <span id="modalParentName"></span></p>
+    <p><strong>Mobile:</strong> <span id="modalParentMobile"></span></p>
+    <p><strong>Email:</strong> <span id="modalParentEmail"></span></p>
+    <hr>
+    <p><strong>Name:</strong> <span id="modalStudentName"></span></p>
+    <p><strong>Student Mobile:</strong> <span id="modalStudentMobile"></span></p>
+    <p><strong>Branch:</strong> <span id="modalStudentBranch"></span></p>
+    <p><strong>Type:</strong> <span id="modalReqType"></span></p>
+    <p><strong>Date:</strong> <span id="modalReqDate"></span></p>
+    <p><strong>Description:</strong> <span id="modalReqDescription"></span></p>
+    <p><strong>Status:</strong> <span id="modalRequestStatus" class="status-badge"></span></p>
+    <p><strong>Attendance:</strong></p>
+    <div id="modalAttendance"></div>
+  </div>
+</div>
+
+<div id="studentRequestsModal" class="modal">
+  <div class="modal-content">
+    <span class="close-button" onclick="closeStudentRequestsModal()">&times;</span>
+    <h3>Requests of <span id="studentRequestsModalSid"></span></h3>
+    <table class="styled-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody id="studentRequestsTableBody">
+        <!-- Filled by JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  window.allRequests = <%- JSON.stringify(allRequests) %>;
+</script>
+<script>
+function respondRequest(reqid, status, btn) {
+  const comment = document.getElementById('comment-' + reqid).value;
+  fetch('/update-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: reqid, status, comments: comment })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Remove the row from Pending Requests table
+      const row = document.getElementById('pending-row-' + reqid);
+      if (row) row.remove();
+
+      // Update status and comments in All Requests table
+      document.querySelectorAll('#allRequestsTable tr').forEach(tr => {
+        if (tr.children[0] && tr.children[0].innerText == reqid) {
+          // Status is 5th column, comments is 6th (0-based index)
+          tr.children[4].innerText = status;
+          tr.children[5].innerText = comment || '';
+        }
+      });
+
+      // Update pending requests count
+      const countElem = document.querySelector('#pendingTab h2');
+      if (countElem) {
+        const match = countElem.innerText.match(/\d+/);
+        if (match) {
+          let count = parseInt(match[0], 10);
+          count = Math.max(0, count - 1);
+          countElem.innerText = `Pending Requests (${count})`;
+        }
+      }
+    } else {
+      alert(data.message);
+    }
+  })
+  .catch(() => alert('Network error'));
+}
+</script>
+<script>
+function showStudentRequests(sid) {
+  const requests = window.allRequests.filter(r => r.sid === sid);
+  document.getElementById('studentRequestsModalSid').innerText = sid;
+  const tbody = document.getElementById('studentRequestsTableBody');
+  tbody.innerHTML = '';
+  if (requests.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5">No requests found.</td></tr>';
+  } else {
+    requests.forEach(req => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${req.reqid}</td>
+          <td>${req.req_type}</td>
+          <td>${new Date(req.req_date).toLocaleDateString()}</td>
+          <td>${req.status}</td>
+          <td>${req.description || ''}</td>
+        </tr>
+      `;
+    });
+  }
+  document.getElementById('studentRequestsModal').style.display = 'block';
+}
+
+function closeStudentRequestsModal() {
+  document.getElementById('studentRequestsModal').style.display = 'none';
+}
+
+function showRequestDetails(req) {
+  //document.getElementById('modalReqId').innerText = req.reqid;
+  document.getElementById('modalStudentName').innerText = req.student_name;
+  document.getElementById('modalStudentMobile').innerText = req.student_mobile || 'N/A';
+  document.getElementById('modalStudentBranch').innerText = req.student_branch || 'N/A';
+  document.getElementById('modalReqType').innerText = req.req_type;
+  document.getElementById('modalReqDate').innerText = new Date(req.req_date).toLocaleDateString();
+  document.getElementById('modalReqDescription').innerText = req.description;
+  const statusElem = document.getElementById('modalRequestStatus');
+  statusElem.innerText = req.status || 'N/A';
+  statusElem.setAttribute('data-status', req.status || '');
+  document.getElementById('modalAttendance').innerHTML = req.attendance
+    ? `<img src="/attendance/${req.reqid}" style="max-width:200px;">`
+    : 'No file';
+  document.getElementById('modalParentName').innerText = req.parent_name || 'N/A';
+  document.getElementById('modalParentMobile').innerText = req.parent_mobile || 'N/A';
+  document.getElementById('modalParentEmail').innerText = req.parent_email || 'N/A';
+  document.getElementById('requestDetailsModal').style.display = 'block';
+}
+
+function closeModal() {
+  document.getElementById('requestDetailsModal').style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.matches('#modalAttendance img')) {
+    e.target.classList.toggle('magnified');
+  } else {
+    // Remove magnify if clicked outside the image
+    const img = document.querySelector('#modalAttendance img.magnified');
+    if (img) img.classList.remove('magnified');
+  }
+});
+
+function toggleDropdown() {
+  const dropdown = document.getElementById('userDropdown');
+  dropdown.classList.toggle('show');
+}
+
+function switchTab(tabId, button) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show'));
+  document.getElementById(tabId).classList.add('show');
+  document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+  button.classList.add('active');
+}
+
+function printRequestDetails() {
+  window.print();
+}
+
+// Student search filter
+document.getElementById('studentSearch').addEventListener('input', function() {
+  const search = this.value.toLowerCase();
+  document.querySelectorAll('#studentsTable tr').forEach(row => {
+    const text = row.innerText.toLowerCase();
+    row.style.display = text.includes(search) ? '' : 'none';
+  });
+});
+</script>
+</body>
+</html>
