@@ -12,6 +12,7 @@ import profileRoutes from './profileRoutes.js';
 import facultyProfileRoutes from './facultyProfileRoutes.js';
 import bcrypt from 'bcrypt';
 import nodemailer from 'nodemailer';
+import * as crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
