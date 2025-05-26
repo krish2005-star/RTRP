@@ -713,6 +713,90 @@ app.get('/faculty/view-requests', isAuthenticated, (req, res) => {
   );
 });
 
+app.get('/forgot-password', (req, res) => {
+  res.render('forgot-password');
+});
+
+app.post('/forgot-password', async (req, res) => {
+  const { email, role } = req.body;
+  const table = role === 'faculty' ? 'faculty' : 'student';
+
+  // Generate a secure token
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+  // Check if user exists
+  const userQuery = `SELECT * FROM ${table} WHERE email = $1`;
+  const userResult = await db.query(userQuery, [email]);
+  if (userResult.rows.length === 0) {
+    return res.render('forgot-password', { message: 'If this email is registered, a reset link will be sent.' });
+  }
+
+  // Save token and expiry in DB
+  await db.query(
+    `UPDATE ${table} SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3`,
+    [token, expiry, email]
+  );
+
+  // Send email with reset link
+  const resetLink = `${process.env.BASE_URL || 'http://localhost:3000'}/reset-password/${token}?role=${role}`;
+  // Configure your SMTP settings here
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SMTP_USER, // your email
+      pass: process.env.SMTP_PASS  // your email password or app password
+    }
+  });
+
+  await transporter.sendMail({
+    from: process.env.SMTP_USER,
+    to: email,
+    subject: 'Password Reset',
+    html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link will expire in 1 hour.</p>`
+  });
+
+  res.render('forgot-password', { message: 'If this email is registered, a reset link will be sent.' });
+});
+
+// Show reset password form
+app.get('/reset-password/:token', async (req, res) => {
+  const { token } = req.params;
+  const { role } = req.query;
+  const table = role === 'faculty' ? 'faculty' : 'student';
+
+  // Find user with this token and check expiry
+  const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
+  const userResult = await db.query(userQuery, [token]);
+  if (userResult.rows.length === 0) {
+    return res.send('Invalid or expired reset link.');
+  }
+  res.render('reset-password', { token, role });
+});
+
+// Handle new password submission
+app.post('/reset-password/:token', async (req, res) => {
+  const { token } = req.params;
+  const { role } = req.query;
+  const { password } = req.body;
+  const table = role === 'faculty' ? 'faculty' : 'student';
+
+  // Find user with this token and check expiry
+  const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
+  const userResult = await db.query(userQuery, [token]);
+  if (userResult.rows.length === 0) {
+    return res.send('Invalid or expired reset link.');
+  }
+
+  // Update password and clear token
+  await db.query(
+    `UPDATE ${table} SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE reset_token = $2`,
+    [password, token]
+  );
+
+  res.render('reset-password', { message: 'Password reset successful! You can now log in.', token: '', role });
+});
+
 app.get('/logout', (req, res) => {
   req.session.destroy();
   res.redirect('/login');
