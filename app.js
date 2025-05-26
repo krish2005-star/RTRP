@@ -747,7 +747,7 @@ app.post('/forgot-password', async (req, res) => {
     const resetLink = `${process.env.BASE_URL || 'http://localhost:3000'}/reset-password/${token}?role=${role}`;
     
     // Configure your SMTP settings here
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.SMTP_USER, // your email
