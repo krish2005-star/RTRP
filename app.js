@@ -99,106 +99,63 @@ app.get('/login', (req, res) => {
   res.render('login', { error: null });
 });
 
-app.post('/login', (req, res) => {
-  const username = req.body.username.trim();
-  const password = req.body.password; 
-  const role = req.body.role;
-
-
-  console.log('Login attempt:', { username, password, role }); // Debug log
-
-  let query;
-  let idField;
-  let redirectPath;
-
-  // Set up query based on role
-  if (role === 'student') {
-    query = 'SELECT * FROM student WHERE email = $1';
-    idField = 'sid';
-    redirectPath = '/student';
-  } else if (role === 'faculty') {
-    query = 'SELECT * FROM faculty WHERE email = $1';
-    idField = 'fid';
-    redirectPath = '/faculty';
-  } else {
-    return res.render('login', { error: 'Invalid role selected' });
-  }
-
-  console.log('Executing query:', query);
-  console.log('With parameters:', [username]);
-
-  // Execute the query
-  db.query(query, [username], (err, result) => {
-    if (err) {
-      console.error('Database query error:', err);
-      return res.render('login', { error: 'Database error occurred' });
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+    const table = role === 'faculty' ? 'faculty' : 'student';
+    
+    console.log('Login attempt:', { email, role, passwordLength: password?.length });
+    
+    // Find user
+    const userQuery = `SELECT * FROM ${table} WHERE email = $1`;
+    const userResult = await db.query(userQuery, [email]);
+    
+    if (userResult.rows.length === 0) {
+      console.log('User not found');
+      return res.render('login', { 
+        message: 'Invalid email or password' 
+      });
     }
-
-    console.log('Query result:', result.rows);
-    console.log('Number of rows found:', result.rows.length);
-
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
-      console.log('Found user:', user);
-      console.log('Stored password:', user.password);
-      console.log('Entered password:', password);
-
-      if (user.password && user.password.startsWith('$2b$')) {
-        // Use bcrypt to compare hashed password
-        bcrypt.compare(password, user.password, (err, isMatch) => {
-          if (err) {
-            console.error('Bcrypt comparison error:', err);
-            return res.render('login', { error: 'Authentication error' });
-          }
-
-          console.log('Bcrypt password match:', isMatch);
-
-          if (isMatch) {
-            // Login successful
-            req.session.user = {
-              id: user[idField],
-              name: user.name,
-              email: user.email,
-              role: role
-            };
-
-            console.log('Login successful for:', user.name);
-            res.redirect(redirectPath);
-          } else {
-            console.log('Bcrypt password mismatch');
-            res.render('login', { error: 'Invalid username or password' });
-          }
-        });
-      } else if (!user.password){
-        // Password is null: allow login with ID as password (first-time login)
-        if (password === String(user[idField])) {
-          req.session.user = {
-            id: user[idField],
-            name: user.name,
-            email: user.email,
-            role: role
-          };
-          res.redirect(redirectPath)
-        } else {
-          const isMatch = String(user.password) === String(password);
-          if (isMatch) {
-            req.session.user = {
-              id: user[idField],
-              name: user.name,
-              email: user.email,
-              role: role
-            };
-            res.redirect(redirectPath);
-        }else {
-      // No user found
-      console.log('No user found with email:', username);
-      res.render('login', { error: 'Invalid username or password' });
-        }
-      }
+    
+    const user = userResult.rows[0];
+    console.log('User found, comparing passwords...');
+    console.log('Stored password starts with $2b$:', user.password.startsWith('$2b$'));
+    
+    // Compare password with hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log('Password comparison result:', isPasswordValid);
+    
+    if (!isPasswordValid) {
+      console.log('Password comparison failed');
+      return res.render('login', { 
+        message: 'Invalid email or password' 
+      });
     }
+    
+    // Set session
+    req.session.user = {
+      id: user.id,
+      email: user.email,
+      role: role
+    };
+    
+    console.log('Login successful, redirecting...');
+    
+    // Redirect based on role
+    if (role === 'student') {
+      res.redirect('/student-dashboard');
+    } else if (role === 'faculty') {
+      res.redirect('/faculty-dashboard');
+    }
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    res.render('login', { 
+      message: 'An error occurred during login. Please try again.' 
+    });
   }
 });
-});
+
 
 app.get('/student', isAuthenticated, (req, res) => {
   if (req.session.user.role !== 'student') {
@@ -719,83 +676,144 @@ app.get('/forgot-password', (req, res) => {
 });
 
 app.post('/forgot-password', async (req, res) => {
-  const { email, role } = req.body;
-  const table = role === 'faculty' ? 'faculty' : 'student';
-
-  // Generate a secure token
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
-
-  // Check if user exists
-  const userQuery = `SELECT * FROM ${table} WHERE email = $1`;
-  const userResult = await db.query(userQuery, [email]);
-  if (userResult.rows.length === 0) {
-    return res.render('forgot-password', { message: 'If this email is registered, a reset link will be sent.' });
-  }
-
-  // Save token and expiry in DB
-  await db.query(
-    `UPDATE ${table} SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3`,
-    [token, expiry, email]
-  );
-
-  // Send email with reset link
-  const resetLink = `${process.env.BASE_URL || 'http://localhost:3000'}/reset-password/${token}?role=${role}`;
-  // Configure your SMTP settings here
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.SMTP_USER, // your email
-      pass: process.env.SMTP_PASS  // your email password or app password
+  try {
+    const { email, role } = req.body;
+    const table = role === 'faculty' ? 'faculty' : 'student';
+    
+    // Generate a secure token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    
+    // Check if user exists
+    const userQuery = `SELECT * FROM ${table} WHERE email = $1`;
+    const userResult = await db.query(userQuery, [email]);
+    
+    if (userResult.rows.length === 0) {
+      return res.render('forgot-password', { 
+        message: 'If this email is registered, a reset link will be sent.' 
+      });
     }
-  });
-
-  await transporter.sendMail({
-    from: process.env.SMTP_USER,
-    to: email,
-    subject: 'Password Reset',
-    html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link will expire in 1 hour.</p>`
-  });
-
-  res.render('forgot-password', { message: 'If this email is registered, a reset link will be sent.' });
+    
+    // Save token and expiry in DB
+    await db.query(
+      `UPDATE ${table} SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3`,
+      [token, expiry, email]
+    );
+    
+    // Send email with reset link
+    const resetLink = `${process.env.BASE_URL || 'http://localhost:3000'}/reset-password/${token}?role=${role}`;
+    
+    // Configure your SMTP settings here
+    const transporter = nodemailer.createTransporter({
+      service: 'gmail',
+      auth: {
+        user: process.env.SMTP_USER, // your email
+        pass: process.env.SMTP_PASS  // your email password or app password
+      }
+    });
+    
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: 'Password Reset',
+      html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link will expire in 1 hour.</p>`
+    });
+    
+    res.render('forgot-password', { 
+      message: 'If this email is registered, a reset link will be sent.' 
+    });
+    
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.render('forgot-password', { 
+      message: 'An error occurred. Please try again later.' 
+    });
+  }
 });
 
 // Show reset password form
 app.get('/reset-password/:token', async (req, res) => {
-  const { token } = req.params;
-  const { role } = req.query;
-  const table = role === 'faculty' ? 'faculty' : 'student';
-
-  // Find user with this token and check expiry
-  const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
-  const userResult = await db.query(userQuery, [token]);
-  if (userResult.rows.length === 0) {
-    return res.send('Invalid or expired reset link.');
+  try {
+    const { token } = req.params;
+    const { role } = req.query;
+    const table = role === 'faculty' ? 'faculty' : 'student';
+    
+    // Find user with this token and check expiry
+    const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
+    const userResult = await db.query(userQuery, [token]);
+    
+    if (userResult.rows.length === 0) {
+      return res.redirect('/forgot-password?message=Invalid or expired reset link');
+    }
+    
+    res.render('reset-password', { token, role });
+    
+  } catch (error) {
+    console.error('Reset password GET error:', error);
+    res.redirect('/forgot-password?message=An error occurred');
   }
-  res.render('reset-password', { token, role });
 });
 
-// Handle new password submission
+// Handle new password submission - FIXED VERSION WITH HASHING
 app.post('/reset-password/:token', async (req, res) => {
-  const { token } = req.params;
-  const { role } = req.query;
-  const { password } = req.body;
-  const table = role === 'faculty' ? 'faculty' : 'student';
-
-  // Find user with this token and check expiry
-  const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
-  const userResult = await db.query(userQuery, [token]);
-  if (userResult.rows.length === 0) {
-    return res.send('Invalid or expired reset link.');
+  try {
+    const { token } = req.params;
+    const { role } = req.query;
+    const { password } = req.body;
+    const table = role === 'faculty' ? 'faculty' : 'student';
+    
+    console.log('Reset password attempt:', { token: token.substring(0, 10) + '...', role, passwordLength: password?.length });
+    
+    // Validate password
+    if (!password || password.length < 6) {
+      return res.render('reset-password', { 
+        token, 
+        role, 
+        message: 'Password must be at least 6 characters long' 
+      });
+    }
+    
+    // Find user with this token and check expiry
+    const userQuery = `SELECT * FROM ${table} WHERE reset_token = $1 AND reset_token_expiry > NOW()`;
+    const userResult = await db.query(userQuery, [token]);
+    
+    if (userResult.rows.length === 0) {
+      return res.render('reset-password', { 
+        token, 
+        role, 
+        message: 'Invalid or expired reset link' 
+      });
+    }
+    
+    console.log('User found, hashing password...');
+    
+    // CRITICAL FIX: Hash the password before storing
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
+    console.log('Original password:', password);
+    console.log('Hashed password:', hashedPassword);
+    console.log('Hash starts with $2b$:', hashedPassword.startsWith('$2b$'));
+    
+    // Update password with hashed version and clear token
+    await db.query(
+      `UPDATE ${table} SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE reset_token = $2`,
+      [hashedPassword, token] // Use hashedPassword instead of plain password
+    );
+    
+    console.log('Password updated in database with hash');
+    
+    // Redirect to login instead of staying on reset page
+    res.redirect('/login?message=Password reset successful! You can now log in with your new password.');
+    
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.render('reset-password', { 
+      token: req.params.token, 
+      role: req.query.role, 
+      message: 'An error occurred. Please try again.' 
+    });
   }
-
-  // Update password and clear token
-  await db.query(
-    `UPDATE ${table} SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE reset_token = $2`,
-    [password, token]
-  );
-
-  res.render('reset-password', { message: 'Password reset successful! You can now log in.', token: '', role });
 });
 
 app.get('/logout', (req, res) => {
