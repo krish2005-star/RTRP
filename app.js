@@ -99,63 +99,106 @@ app.get('/login', (req, res) => {
   res.render('login', { error: null });
 });
 
-app.post('/login', async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-    const table = role === 'faculty' ? 'faculty' : 'student';
-    
-    console.log('Login attempt:', { email, role, passwordLength: password?.length });
-    
-    // Find user
-    const userQuery = `SELECT * FROM ${table} WHERE email = $1`;
-    const userResult = await db.query(userQuery, [email]);
-    
-    if (userResult.rows.length === 0) {
-      console.log('User not found');
-      return res.render('login', { 
-        message: 'Invalid email or password' 
-      });
+app.post('/login', (req, res) => {
+  const username = req.body.username.trim();
+  const password = req.body.password; 
+  const role = req.body.role;
+
+
+  console.log('Login attempt:', { username, password, role }); // Debug log
+
+  let query;
+  let idField;
+  let redirectPath;
+
+  // Set up query based on role
+  if (role === 'student') {
+    query = 'SELECT * FROM student WHERE email = $1';
+    idField = 'sid';
+    redirectPath = '/student';
+  } else if (role === 'faculty') {
+    query = 'SELECT * FROM faculty WHERE email = $1';
+    idField = 'fid';
+    redirectPath = '/faculty';
+  } else {
+    return res.render('login', { error: 'Invalid role selected' });
+  }
+
+  console.log('Executing query:', query);
+  console.log('With parameters:', [username]);
+
+  // Execute the query
+  db.query(query, [username], (err, result) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.render('login', { error: 'Database error occurred' });
     }
-    
-    const user = userResult.rows[0];
-    console.log('User found, comparing passwords...');
-    console.log('Stored password starts with $2b$:', user.password.startsWith('$2b$'));
-    
-    // Compare password with hashed password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('Password comparison result:', isPasswordValid);
-    
-    if (!isPasswordValid) {
-      console.log('Password comparison failed');
-      return res.render('login', { 
-        message: 'Invalid email or password' 
-      });
+
+    console.log('Query result:', result.rows);
+    console.log('Number of rows found:', result.rows.length);
+
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      console.log('Found user:', user);
+      console.log('Stored password:', user.password);
+      console.log('Entered password:', password);
+
+      if (user.password && user.password.startsWith('$2b$')) {
+        // Use bcrypt to compare hashed password
+        bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) {
+            console.error('Bcrypt comparison error:', err);
+            return res.render('login', { error: 'Authentication error' });
+          }
+
+          console.log('Bcrypt password match:', isMatch);
+
+          if (isMatch) {
+            // Login successful
+            req.session.user = {
+              id: user[idField],
+              name: user.name,
+              email: user.email,
+              role: role
+            };
+
+            console.log('Login successful for:', user.name);
+            res.redirect(redirectPath);
+          } else {
+            console.log('Bcrypt password mismatch');
+            res.render('login', { error: 'Invalid username or password' });
+          }
+        });
+      } else if (!user.password){
+        // Password is null: allow login with ID as password (first-time login)
+        if (password === String(user[idField])) {
+          req.session.user = {
+            id: user[idField],
+            name: user.name,
+            email: user.email,
+            role: role
+          };
+          res.redirect(redirectPath)
+        } else {
+          const isMatch = String(user.password) === String(password);
+          if (isMatch) {
+            req.session.user = {
+              id: user[idField],
+              name: user.name,
+              email: user.email,
+              role: role
+            };
+            res.redirect(redirectPath);
+        }else {
+      // No user found
+      console.log('No user found with email:', username);
+      res.render('login', { error: 'Invalid username or password' });
+        }
+      }
     }
-    
-    // Set session
-    req.session.user = {
-      id: user.id,
-      email: user.email,
-      role: role
-    };
-    
-    console.log('Login successful, redirecting...');
-    
-    // Redirect based on role
-    if (role === 'student') {
-      res.redirect('/student-dashboard');
-    } else if (role === 'faculty') {
-      res.redirect('/faculty-dashboard');
-    }
-    
-  } catch (error) {
-    console.error('Login error:', error);
-    res.render('login', { 
-      message: 'An error occurred during login. Please try again.' 
-    });
   }
 });
-
+});
 
 app.get('/student', isAuthenticated, (req, res) => {
   if (req.session.user.role !== 'student') {
